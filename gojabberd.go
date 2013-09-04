@@ -46,16 +46,24 @@ func C2sConnection(conn net.Conn) error {
 	var features goxmpp.Features
 	features.StartTLS = nil //new(goxmpp.StartTLS)
 	features.Mechanisms = new(goxmpp.Mechanisms)
-	features.Mechanisms.Names = append(features.Mechanisms.Names, "DIGEST-MD5")
+	features.Mechanisms.Names = append(features.Mechanisms.Names, "PLAIN", "DIGEST-MD5")
 	sw.Encoder.Encode(features)
 
 	mechanisms := map[[2]string](func(xml.StartElement) interface{}){
-		[2]string{"auth", "urn:ietf:params:xml:ns:xmpp-sasl"}: func(xml.StartElement) interface{} { return new(goxmpp.DigestMD5Auth) },
+		[2]string{"auth", "urn:ietf:params:xml:ns:xmpp-sasl"}: func(e xml.StartElement) interface{} {
+			// Look up e.attr[mechanism] to find the mechanism they want
+			return new(goxmpp.DigestMD5Auth)
+		},
 	}
 
-	md5, err := sw.ReadXMLChunk(mechanisms)
+	c, err := sw.ReadXMLChunk(mechanisms)
 	if err == nil {
-		println("** Received digest-md5 auth with id:", md5.(*goxmpp.DigestMD5Auth).ID)
+		switch c := c.(type) {
+		case *goxmpp.PlainAuth:
+			println("** PLAIN:", c.Nonce)
+		case *goxmpp.DigestMD5Auth:
+			println("** MD5:", c.ID)
+		}
 	} else {
 		println(err.Error())
 	}
