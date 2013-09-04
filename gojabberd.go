@@ -2,7 +2,7 @@ package main
 
 import (
 	"net"
-	"encoding/xml"
+	//"encoding/xml"
 	"github.com/dotdoom/goxmpp"
 )
 
@@ -28,12 +28,18 @@ func C2sServer() error {
 }
 
 func main() {
+	goxmpp.RegisterFeatures()
+
 	err := C2sServer()
 	if err != nil { println(err.Error()) }
 }
 
+
+
 func C2sConnection(conn net.Conn) error {
 	println("New connection")
+	defer conn.Close()
+
 	sw := goxmpp.NewStreamWrapper(conn)
 
 	stream, err := sw.ReadStreamOpen()
@@ -43,6 +49,13 @@ func C2sConnection(conn net.Conn) error {
 
 	println("** Received stream to:", stream.From)
 
+	for {
+		sw.Encoder.Encode(goxmpp.StreamFeatures.ExposeTo(sw))
+		sw.Decoder.Token()
+		sw.Decoder.Skip()
+	}
+
+	/*
 	var features goxmpp.Features
 	features.StartTLS = nil //new(goxmpp.StartTLS)
 	features.Mechanisms = new(goxmpp.Mechanisms)
@@ -69,7 +82,7 @@ func C2sConnection(conn net.Conn) error {
 	}
 
 	// Just kidding...
-	sw.RW.Write([]byte("<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>"))
+	sw.RW.Write([]byte("<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>"))*/
 
 /*
 <stream:features>
@@ -88,5 +101,5 @@ func C2sConnection(conn net.Conn) error {
 */
 
 	println("Closing connection");
-	return conn.Close()
+	return nil
 }
