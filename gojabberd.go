@@ -28,7 +28,7 @@ func C2sServer() error {
 }
 
 func main() {
-	goxmpp.RegisterFeatures()
+	goxmpp.RegisterGlobalStreamFeatures()
 
 	err := C2sServer()
 	if err != nil { println(err.Error()) }
@@ -50,7 +50,7 @@ func C2sConnection(conn net.Conn) error {
 	println("** Received stream to:", stream.From)
 
 	for {
-		sw.Encoder.Encode(goxmpp.StreamFeatures.ExposeTo(sw))
+		sw.Encoder.Encode(goxmpp.GlobalStreamFeatures.ExposeTo(sw))
 		sw.Decoder.Token()
 		sw.Decoder.Skip()
 	}
