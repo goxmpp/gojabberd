@@ -46,16 +46,19 @@ func C2sConnection(conn net.Conn) error {
 
 	sw := stream.NewWrapper(conn)
 
-	stream, err := sw.ReadStreamOpen()
-	if err != nil {
-		return err
+	for sw.State["stream_opened"] != true {
+
+		stream, err := sw.ReadStreamOpen()
+		if err != nil {
+			return err
+		}
+		stream.From, stream.To = stream.To, ""
+		sw.WriteStreamOpen(stream, "jabber:client")
+
+		println("** Received stream to:", stream.From)
+
+		sw.FeaturesLoop()
 	}
-	stream.From, stream.To = stream.To, ""
-	sw.WriteStreamOpen(stream, "jabber:client")
-
-	println("** Received stream to:", stream.From)
-
-	sw.FeaturesLoop()
 
 	//for {
 	//}
