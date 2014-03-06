@@ -1,18 +1,21 @@
 package main
 
 import (
+	"fmt"
 	"net"
-	//"encoding/xml"
+
 	_ "github.com/dotdoom/goxmpp"
+	"github.com/dotdoom/goxmpp/extensions/features/auth/mechanisms"
 	"github.com/dotdoom/goxmpp/stream"
+	"github.com/dotdoom/goxmpp/stream/elements/features"
 )
 
-type C2s struct {
+/*type C2s struct {
 	Conn          net.Conn
 	Authenticated bool
 }
 
-var clients map[string]C2s
+var clients map[string]C2s*/
 
 func C2sServer() error {
 	listener, err := net.Listen("tcp", "0.0.0.0:5222")
@@ -20,6 +23,7 @@ func C2sServer() error {
 		return err
 	}
 
+	println("Server started")
 	for {
 		conn, err := listener.Accept()
 		if err == nil {
@@ -44,69 +48,37 @@ func C2sConnection(conn net.Conn) error {
 		println("Connection closed")
 	}()
 
-	sw := stream.NewWrapper(conn)
+	st := stream.NewStream(conn)
 
-	for sw.State["stream_opened"] != true {
+	// Push states for all features we want to use
+	//st.State.Push(&methods.GzipState{Level: 5})
 
-		stream, err := sw.ReadStreamOpen()
-		if err != nil {
+	st.State.Push(&mechanisms.PlainState{
+		Callback: func(user string, password string) bool {
+			fmt.Println("Trying to auth (using PLAIN)", user)
+			return true
+		},
+		RequireEncryption: true,
+	})
+
+	/*st.State.Push(&mechanisms.DigestMD5State{Callback: func(user string, salt string) string {
+		fmt.Println("Trying to auth (using DIGEST-MD5)", user)
+		return salt
+	}})*/
+
+	// Go through the features loop until stream is finally open (or something wrong happens)
+	for st.Opened != true {
+		st.ReadOpen()
+		st.From, st.To = st.To, ""
+		st.WriteOpen()
+
+		if err := features.Loop(st); err != nil {
+			fmt.Println("Features loop failed.", err)
 			return err
 		}
-		stream.From, stream.To = stream.To, ""
-		sw.WriteStreamOpen(stream, "jabber:client")
-
-		println("** Received stream to:", stream.From)
-
-		sw.FeaturesLoop()
 	}
 
-	//for {
-	//}
-
-	/*
-		var features goxmpp.Features
-		features.StartTLS = nil //new(goxmpp.StartTLS)
-		features.Mechanisms = new(goxmpp.Mechanisms)
-		features.Mechanisms.Names = append(features.Mechanisms.Names, "PLAIN", "DIGEST-MD5")
-		sw.Encoder.Encode(features)
-
-		mechanisms := map[[2]string](func(xml.StartElement) interface{}){
-			[2]string{"auth", "urn:ietf:params:xml:ns:xmpp-sasl"}: func(e xml.StartElement) interface{} {
-				// Look up e.attr[mechanism] to find the mechanism they want
-				return new(goxmpp.DigestMD5Auth)
-			},
-		}
-
-		c, err := sw.ReadXMLChunk(mechanisms)
-		if err == nil {
-			switch c := c.(type) {
-			case *goxmpp.PlainAuth:
-				println("** PLAIN:", c.Nonce)
-			case *goxmpp.DigestMD5Auth:
-				println("** MD5:", c.ID)
-			}
-		} else {
-			println(err.Error())
-		}
-
-		// Just kidding...
-		sw.RW.Write([]byte("<success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/>"))*/
-
-	/*
-	   <stream:features>
-	   	<starttls xmlns="urn:ietf:params:xml:ns:xmpp-tls"/>
-	   	<compression xmlns="http://jabber.org/features/compress">
-	   		<method>zlib</method>
-	   	</compression>
-	   	<mechanisms xmlns="urn:ietf:params:xml:ns:xmpp-sasl">
-	   		<mechanism>PLAIN</mechanism>
-	   		<mechanism>DIGEST-MD5</mechanism>
-	   		<mechanism>SCRAM-SHA-1</mechanism>
-	   	</mechanisms>
-	   	<c xmlns="http://jabber.org/protocol/caps" node="http://www.process-one.net/en/ejabberd/" ver="rvAR01fKsc40hT0hOLGDuG25y9o=" hash="sha-1"/>
-	   	<register xmlns="http://jabber.org/features/iq-register"/>
-	   </stream:features>
-	*/
+	fmt.Println("Stream opened, required features passed.", st.From)
 
 	return nil
 }
