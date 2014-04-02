@@ -1,3 +1,21 @@
 #!/usr/bin/env bash
 
-mcabber -f $(dirname $0)/mcabberrc
+xterm -e "(sleep 0.5; exec mcabber -f $(dirname $0)/mcabberrc)" &
+mcabber_pid=$!
+sudo tcpdump -ttttlnAs 0 -i lo port 5222 2>&1 | perl -e '
+	use Term::ANSIColor;
+	($server_color, $client_color) = ("green", "red");
+	($|, $data, $from_server) = (1, "", 0);
+	print colored("SERVER", $server_color) . " | " . colored("CLIENT", $client_color) . "\n";
+	while (<STDIN>) {
+		if (/ > \S+5222/) { $from_server = 1 }
+		if (/length (\d+)$/) {
+			if ($data_size) {
+				$data = substr($data, -$data_size-1);
+				print colored($data, $from_server ? $server_color : $client_color);
+			}
+			($data, $data_size, $from_server) = ("", $1, 0)
+		} else { $data .= $_ }
+	}
+'
+kill $mcabber_pid
