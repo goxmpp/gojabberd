@@ -2,7 +2,7 @@
 
 xterm -e "(sleep 0.5; exec mcabber -f $(dirname $0)/mcabberrc)" &
 mcabber_pid=$!
-sudo tcpdump -ttttlnAs 0 -i lo port 5222 2>&1 | perl -e '
+sudo tcpdump -lnAs 0 -i lo port 5222 | perl -e '
 	use Term::ANSIColor;
 	($server_color, $client_color) = ("green", "red");
 	($|, $data, $from_client) = (1, "", 0);
