@@ -6,6 +6,7 @@ import (
 
 	_ "github.com/dotdoom/goxmpp"
 	"github.com/dotdoom/goxmpp/extensions/features/auth/mechanisms"
+	"github.com/dotdoom/goxmpp/extensions/features/bind"
 	"github.com/dotdoom/goxmpp/stream"
 	"github.com/dotdoom/goxmpp/stream/elements/features"
 )
@@ -53,6 +54,13 @@ func C2sConnection(conn net.Conn) error {
 	// Push states for all features we want to use
 	//st.State.Push(&methods.GzipState{Level: 5})
 
+	st.State.Push(&bind.BindState{
+		VerifyResource: func(rc string) bool {
+			fmt.Println("Using resource", rc)
+			return true
+		},
+	})
+
 	st.State.Push(&mechanisms.PlainState{
 		Callback: func(user string, password string) bool {
 			fmt.Println("Trying to auth (using PLAIN)", user)
@@ -78,7 +86,24 @@ func C2sConnection(conn net.Conn) error {
 		}
 	}
 
-	fmt.Println("Stream opened, required features passed.", st.From)
+	fmt.Println("Stream opened, required features passed. JID is", st.To)
+
+	for {
+		e, err := st.ReadElement()
+		if err != nil {
+			fmt.Printf("cannot read element: %v\n", err)
+			return err
+		}
+		fmt.Printf("got element: %#v", e)
+		if feature_handler, ok := e.(features.Handler); ok {
+			fmt.Println("calling feature handler")
+			if err := feature_handler.Handle(st); err != nil {
+				fmt.Printf("cannot handle feature: %v\n", err)
+				return err
+			}
+			fmt.Println("feature handler completed")
+		}
+	}
 
 	return nil
 }
