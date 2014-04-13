@@ -9,6 +9,7 @@ import (
 	"github.com/dotdoom/goxmpp/extensions/features/bind"
 	"github.com/dotdoom/goxmpp/stream"
 	"github.com/dotdoom/goxmpp/stream/elements/features"
+	"github.com/dotdoom/goxmpp/stream/elements/stanzas/presence"
 )
 
 /*type C2s struct {
@@ -44,12 +45,17 @@ func main() {
 
 func C2sConnection(conn net.Conn) error {
 	println("New connection")
+	var st *stream.Stream
+
 	defer func() {
+		if st != nil {
+			st.Close(true)
+		}
 		conn.Close()
 		println("Connection closed")
 	}()
 
-	st := stream.NewStream(conn)
+	st = stream.NewStream(conn)
 
 	// Push states for all features we want to use
 	//st.State.Push(&methods.GzipState{Level: 5})
@@ -62,8 +68,8 @@ func C2sConnection(conn net.Conn) error {
 	})
 
 	st.State.Push(&mechanisms.PlainState{
-		Callback: func(user string, password string) bool {
-			fmt.Println("Trying to auth (using PLAIN)", user)
+		VerifyUserAndPassword: func(user string, password string) bool {
+			fmt.Println("VerifyUserAndPassword (using PLAIN) for", user)
 			return true
 		},
 		RequireEncryption: true,
@@ -88,6 +94,13 @@ func C2sConnection(conn net.Conn) error {
 
 	fmt.Println("Stream opened, required features passed. JID is", st.To)
 
+	pr := presence.NewPresenceElement()
+	pr.From = "test@localhost"
+	pr.To = st.To
+	pr.Status = ""
+	pr.Show = "I'm online!"
+	st.WriteElement(pr)
+
 	for {
 		e, err := st.ReadElement()
 		if err != nil {
@@ -99,9 +112,17 @@ func C2sConnection(conn net.Conn) error {
 			fmt.Println("calling feature handler")
 			if err := feature_handler.Handle(st); err != nil {
 				fmt.Printf("cannot handle feature: %v\n", err)
-				return err
+				continue
+				//return err
 			}
 			fmt.Println("feature handler completed")
+		} else {
+			if stanza, ok := e.(*presence.PresenceElement); ok {
+				fmt.Println("\ngot stanza, responding")
+				stanza.From = "localhost"
+				stanza.To = st.To
+				st.WriteElement(stanza)
+			}
 		}
 	}
 
