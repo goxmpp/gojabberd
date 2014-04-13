@@ -56,6 +56,7 @@ func C2sConnection(conn net.Conn) error {
 	}()
 
 	st = stream.NewStream(conn)
+	st.DefaultNamespace = "jabber:client"
 
 	// Push states for all features we want to use
 	//st.State.Push(&methods.GzipState{Level: 5})
@@ -92,7 +93,7 @@ func C2sConnection(conn net.Conn) error {
 		}
 	}
 
-	fmt.Println("Stream opened, required features passed. JID is", st.To)
+	fmt.Println("gojabberd: stream opened, required features passed. JID is", st.To)
 
 	pr := presence.NewPresenceElement()
 	pr.From = "test@localhost"
@@ -104,21 +105,21 @@ func C2sConnection(conn net.Conn) error {
 	for {
 		e, err := st.ReadElement()
 		if err != nil {
-			fmt.Printf("cannot read element: %v\n", err)
+			fmt.Printf("gojabberd: cannot read element: %v\n", err)
 			return err
 		}
-		fmt.Printf("got element: %#v", e)
+		fmt.Printf("gojabberd: received element: %#v\n", e)
 		if feature_handler, ok := e.(features.Handler); ok {
-			fmt.Println("calling feature handler")
+			fmt.Println("gojabberd: calling feature handler")
 			if err := feature_handler.Handle(st); err != nil {
-				fmt.Printf("cannot handle feature: %v\n", err)
+				fmt.Printf("gojabberd: cannot handle feature: %v\n", err)
 				continue
 				//return err
 			}
-			fmt.Println("feature handler completed")
+			fmt.Println("gojabberd: feature handler completed")
 		} else {
 			if stanza, ok := e.(*presence.PresenceElement); ok {
-				fmt.Println("\ngot stanza, responding")
+				fmt.Println("gojabberd: got stanza, responding")
 				stanza.From = "localhost"
 				stanza.To = st.To
 				st.WriteElement(stanza)
