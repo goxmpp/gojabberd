@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+
+sudo echo "Starting tcpdump"
+sudo tcpdump -lnAs 0 -i lo port 5222 | perl -e '
+	use Term::ANSIColor;
+	($server_color, $client_color) = ("green", "red");
+	($|, $data, $from_client) = (1, "", 0);
+	print colored("SERVER", $server_color) . " | " . colored("CLIENT", $client_color) . "\n";
+	while (<STDIN>) {
+		if (/length (\d+)$/) {
+			if ($data_size) {
+				$data = substr($data, -$data_size-1);
+				print colored($data, $from_client ? $client_color : $server_color);
+			}
+			($data, $data_size) = ("", $1);
+			$from_client = / > \S+5222/
+		} else { $data .= $_ }
+	}
+'
