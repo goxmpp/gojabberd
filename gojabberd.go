@@ -23,8 +23,10 @@ import (
 var clients map[string]C2s*/
 
 var tls = flag.Bool("tls", false, "Use TLS")
-var pem = flag.String("pem", "conf/cert.pem", "Path to pem file")
-var key = flag.String("key", "conf/cert.key", "Path to key file")
+
+// TODO path should be changed to something meaningful
+var pem = flag.String("pem", "test/cert.pem", "Path to pem file")
+var key = flag.String("key", "test/cert.key", "Path to key file")
 
 func C2sServer() error {
 	listener, err := net.Listen("tcp", "0.0.0.0:5222")
