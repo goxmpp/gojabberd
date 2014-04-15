@@ -7,6 +7,7 @@ import (
 	_ "github.com/dotdoom/goxmpp"
 	"github.com/dotdoom/goxmpp/extensions/features/auth/mechanisms"
 	"github.com/dotdoom/goxmpp/extensions/features/bind"
+	"github.com/dotdoom/goxmpp/extensions/features/compression"
 	"github.com/dotdoom/goxmpp/stream"
 	"github.com/dotdoom/goxmpp/stream/elements/features"
 	"github.com/dotdoom/goxmpp/stream/elements/stanzas/presence"
@@ -47,14 +48,6 @@ func C2sConnection(conn net.Conn) error {
 	println("New connection")
 	var st *stream.Stream
 
-	defer func() {
-		if st != nil {
-			st.Close(true)
-		}
-		conn.Close()
-		println("Connection closed")
-	}()
-
 	st = stream.NewStream(conn)
 	st.DefaultNamespace = "jabber:client"
 
@@ -76,56 +69,54 @@ func C2sConnection(conn net.Conn) error {
 		RequireEncryption: true,
 	})
 
+	st.State.Push(compression.NewCompressState())
+
 	/*st.State.Push(&mechanisms.DigestMD5State{Callback: func(user string, salt string) string {
 		fmt.Println("Trying to auth (using DIGEST-MD5)", user)
 		return salt
 	}})*/
 
-	// Go through the features loop until stream is finally open (or something wrong happens)
-	for st.Opened != true {
-		st.ReadOpen()
-		st.From, st.To = st.To, ""
-		st.WriteOpen()
-
+	return st.Open(func(s *stream.Stream) error {
+		// Go through the features loop until stream is finally open (or something wrong happens)
 		if err := features.Loop(st); err != nil {
 			fmt.Println("Features loop failed.", err)
 			return err
 		}
-	}
 
-	fmt.Println("gojabberd: stream opened, required features passed. JID is", st.To)
+		fmt.Println("gojabberd: stream opened, required features passed. JID is", st.To)
 
-	pr := presence.NewPresenceElement()
-	pr.From = "test@localhost"
-	pr.To = st.To
-	pr.Status = ""
-	pr.Show = "I'm online!"
-	st.WriteElement(pr)
+		pr := presence.NewPresenceElement()
+		pr.From = "test@localhost"
+		pr.To = st.To
+		pr.Status = ""
+		pr.Show = "I'm online!"
+		st.WriteElement(pr)
 
-	for {
-		e, err := st.ReadElement()
-		if err != nil {
-			fmt.Printf("gojabberd: cannot read element: %v\n", err)
-			return err
-		}
-		fmt.Printf("gojabberd: received element: %#v\n", e)
-		if feature_handler, ok := e.(features.Handler); ok {
-			fmt.Println("gojabberd: calling feature handler")
-			if err := feature_handler.Handle(st); err != nil {
-				fmt.Printf("gojabberd: cannot handle feature: %v\n", err)
-				continue
-				//return err
+		for {
+			e, err := st.ReadElement()
+			if err != nil {
+				fmt.Printf("gojabberd: cannot read element: %v\n", err)
+				return err
 			}
-			fmt.Println("gojabberd: feature handler completed")
-		} else {
-			if stanza, ok := e.(*presence.PresenceElement); ok {
-				fmt.Println("gojabberd: got stanza, responding")
-				stanza.From = "localhost"
-				stanza.To = st.To
-				st.WriteElement(stanza)
+			fmt.Printf("gojabberd: received element: %#v\n", e)
+			if feature_handler, ok := e.(features.Handler); ok {
+				fmt.Println("gojabberd: calling feature handler")
+				if err := feature_handler.Handle(st); err != nil {
+					fmt.Printf("gojabberd: cannot handle feature: %v\n", err)
+					continue
+					//return err
+				}
+				fmt.Println("gojabberd: feature handler completed")
+			} else {
+				if stanza, ok := e.(*presence.PresenceElement); ok {
+					fmt.Println("gojabberd: got stanza, responding")
+					stanza.From = "localhost"
+					stanza.To = st.To
+					st.WriteElement(stanza)
+				}
 			}
 		}
-	}
 
-	return nil
+		return nil
+	})
 }
