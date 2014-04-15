@@ -79,9 +79,7 @@ func C2sConnection(conn net.Conn) error {
 	})
 
 	st.State.Push(compression.NewCompressState())
-	if *tls {
-		st.State.Push(starttls.NewStartTLSState(starttls.NewTLSConfig(*pem, *key)))
-	}
+	st.State.Push(starttls.NewStartTLSState(*tls, starttls.NewTLSConfig(*pem, *key)))
 
 	/*st.State.Push(&mechanisms.DigestMD5State{Callback: func(user string, salt string) string {
 		fmt.Println("Trying to auth (using DIGEST-MD5)", user)
