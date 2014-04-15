@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"net"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/dotdoom/goxmpp/extensions/features/auth/mechanisms"
 	"github.com/dotdoom/goxmpp/extensions/features/bind"
 	"github.com/dotdoom/goxmpp/extensions/features/compression"
+	"github.com/dotdoom/goxmpp/extensions/features/starttls"
 	"github.com/dotdoom/goxmpp/stream"
 	"github.com/dotdoom/goxmpp/stream/elements/features"
 	"github.com/dotdoom/goxmpp/stream/elements/stanzas/presence"
@@ -19,6 +21,12 @@ import (
 }
 
 var clients map[string]C2s*/
+
+var tls = flag.Bool("tls", false, "Use TLS")
+
+// TODO path should be changed to something meaningful
+var pem = flag.String("pem", "test/cert.pem", "Path to pem file")
+var key = flag.String("key", "test/cert.key", "Path to key file")
 
 func C2sServer() error {
 	listener, err := net.Listen("tcp", "0.0.0.0:5222")
@@ -38,6 +46,7 @@ func C2sServer() error {
 }
 
 func main() {
+	flag.Parse()
 	err := C2sServer()
 	if err != nil {
 		println(err.Error())
@@ -70,6 +79,9 @@ func C2sConnection(conn net.Conn) error {
 	})
 
 	st.State.Push(compression.NewCompressState())
+	if *tls {
+		st.State.Push(starttls.NewStartTLSState(starttls.NewTLSConfig(*pem, *key)))
+	}
 
 	/*st.State.Push(&mechanisms.DigestMD5State{Callback: func(user string, salt string) string {
 		fmt.Println("Trying to auth (using DIGEST-MD5)", user)
