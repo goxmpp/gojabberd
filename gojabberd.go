@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"net"
 
 	_ "github.com/dotdoom/goxmpp"
@@ -25,8 +26,8 @@ var clients map[string]C2s*/
 var tls = flag.Bool("tls", false, "Use TLS")
 
 // TODO path should be changed to something meaningful
-var pem = flag.String("pem", "test/cert.pem", "Path to pem file")
-var key = flag.String("key", "test/cert.key", "Path to key file")
+var pem = flag.String("pem", "test/gojabberd.pem", "Path to pem file")
+var key = flag.String("key", "test/gojabberd.key", "Path to key file")
 
 func C2sServer() error {
 	listener, err := net.Listen("tcp", "0.0.0.0:5222")
@@ -76,6 +77,20 @@ func C2sConnection(conn net.Conn) error {
 			return true
 		},
 		RequireEncryption: true,
+	})
+
+	st.State.Push(&mechanisms.DigestMD5State{
+		ValidateMD5: func(c *mechanisms.Chalenge, r *mechanisms.Response) bool {
+			fmt.Println("Validating clinet's reply on our chalenge")
+
+			// Test is a password which we should get from some where else
+			password := "test"
+			hash := mechanisms.GenerateResponseHash(c, r, password)
+
+			log.Println("Expected", hash, "Got", r.Response)
+			return hash == r.Response
+		},
+		Realm: []string{"gojabberd"},
 	})
 
 	st.State.Push(compression.NewCompressState())
