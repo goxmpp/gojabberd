@@ -86,7 +86,7 @@ func C2sConnection(conn net.Conn) error {
 
 			// Test is a password which we should get from some where else
 			password := "test"
-			hash := md5.GenerateResponseHash(c, r, password)
+			hash := r.GenerateHash(c, password)
 
 			log.Println("Expected", hash, "Got", r.Response)
 			return hash == r.Response
