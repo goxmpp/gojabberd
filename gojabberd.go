@@ -7,7 +7,8 @@ import (
 	"net"
 
 	_ "github.com/dotdoom/goxmpp"
-	"github.com/dotdoom/goxmpp/extensions/features/auth/mechanisms"
+	"github.com/dotdoom/goxmpp/extensions/features/auth/mechanisms/md5"
+	"github.com/dotdoom/goxmpp/extensions/features/auth/mechanisms/plain"
 	"github.com/dotdoom/goxmpp/extensions/features/bind"
 	"github.com/dotdoom/goxmpp/extensions/features/compression"
 	"github.com/dotdoom/goxmpp/extensions/features/starttls"
@@ -71,7 +72,7 @@ func C2sConnection(conn net.Conn) error {
 		},
 	})
 
-	st.State.Push(&mechanisms.PlainState{
+	st.State.Push(&plain.PlainState{
 		VerifyUserAndPassword: func(user string, password string) bool {
 			fmt.Println("VerifyUserAndPassword (using PLAIN) for", user)
 			return true
@@ -79,13 +80,13 @@ func C2sConnection(conn net.Conn) error {
 		RequireEncryption: true,
 	})
 
-	st.State.Push(&mechanisms.DigestMD5State{
-		ValidateMD5: func(c *mechanisms.Chalenge, r *mechanisms.Response) bool {
+	st.State.Push(&md5.DigestMD5State{
+		ValidateMD5: func(c *md5.Chalenge, r *md5.Response) bool {
 			fmt.Println("Validating clinet's reply on our chalenge")
 
 			// Test is a password which we should get from some where else
 			password := "test"
-			hash := mechanisms.GenerateResponseHash(c, r, password)
+			hash := md5.GenerateResponseHash(c, r, password)
 
 			log.Println("Expected", hash, "Got", r.Response)
 			return hash == r.Response
