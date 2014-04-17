@@ -81,7 +81,7 @@ func C2sConnection(conn net.Conn) error {
 	})
 
 	st.State.Push(&md5.DigestMD5State{
-		ValidateMD5: func(c *md5.Chalenge, r *md5.Response) bool {
+		ValidateMD5: func(c *md5.Challenge, r *md5.Response) bool {
 			fmt.Println("Validating clinet's reply on our chalenge")
 
 			// Test is a password which we should get from some where else
