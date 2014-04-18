@@ -7,8 +7,10 @@ import (
 	"net"
 
 	_ "github.com/dotdoom/goxmpp"
+	"github.com/dotdoom/goxmpp/extensions/features/auth"
 	"github.com/dotdoom/goxmpp/extensions/features/auth/mechanisms/md5"
 	"github.com/dotdoom/goxmpp/extensions/features/auth/mechanisms/plain"
+	"github.com/dotdoom/goxmpp/extensions/features/auth/mechanisms/sha1"
 	"github.com/dotdoom/goxmpp/extensions/features/bind"
 	"github.com/dotdoom/goxmpp/extensions/features/compression"
 	"github.com/dotdoom/goxmpp/extensions/features/starttls"
@@ -24,6 +26,9 @@ import (
 
 var clients map[string]C2s*/
 
+var plain_auth = flag.Bool("plain", false, "Use PLAIN auth")
+var md5_auth = flag.Bool("md5", false, "Use DigestMD5 auth")
+var sha1_auth = flag.Bool("sha1", false, "Use SCRAM-SHA-1 auth")
 var tls = flag.Bool("tls", false, "Use TLS")
 
 // TODO path should be changed to something meaningful
@@ -72,27 +77,40 @@ func C2sConnection(conn net.Conn) error {
 		},
 	})
 
-	st.State.Push(&plain.PlainState{
-		VerifyUserAndPassword: func(user string, password string) bool {
-			fmt.Println("VerifyUserAndPassword (using PLAIN) for", user)
-			return true
-		},
-		RequireEncryption: true,
-	})
+	if *plain_auth {
+		st.State.Push(&plain.PlainState{
+			VerifyUserAndPassword: func(user string, password string) bool {
+				fmt.Println("VerifyUserAndPassword (using PLAIN) for", user)
+				return true
+			},
+			RequireEncryption: true,
+		})
+	}
 
-	st.State.Push(&md5.DigestMD5State{
-		ValidateMD5: func(c *md5.Challenge, r *md5.Response) bool {
-			fmt.Println("Validating clinet's reply on our chalenge")
+	if *md5_auth {
+		st.State.Push(&md5.DigestMD5State{
+			ValidateMD5: func(c *md5.Challenge, r *md5.Response) bool {
+				fmt.Println("Validating clinet's reply on our chalenge")
 
-			// Test is a password which we should get from some where else
-			password := "test"
-			hash := r.GenerateHash(c, password)
+				// Test is a password which we should get from some where else
+				password := "test"
+				hash := r.GenerateHash(c, password)
 
-			log.Println("Expected", hash, "Got", r.Response)
-			return hash == r.Response
-		},
-		Realm: []string{"gojabberd"},
-	})
+				log.Println("Expected", hash, "Got", r.Response)
+				return hash == r.Response
+			},
+			Realm: []string{"gojabberd"},
+		})
+	}
+
+	if *sha1_auth {
+		st.State.Push(&auth.AuthState{
+			GetPasswordByUserName: func(username string) string {
+				return "test"
+			},
+		})
+		st.State.Push(&sha1.SHAState{})
+	}
 
 	st.State.Push(compression.NewCompressState())
 	st.State.Push(starttls.NewStartTLSState(*tls, starttls.NewTLSConfig(*pem, *key)))
