@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
 	"net"
 
 	_ "github.com/dotdoom/goxmpp"
@@ -77,6 +76,12 @@ func C2sConnection(conn net.Conn) error {
 		},
 	})
 
+	st.State.Push(&auth.AuthState{
+		GetPasswordByUserName: func(username string) string {
+			return "test"
+		},
+	})
+
 	if *plain_auth {
 		st.State.Push(&plain.PlainState{
 			VerifyUserAndPassword: func(user string, password string) bool {
@@ -89,26 +94,11 @@ func C2sConnection(conn net.Conn) error {
 
 	if *md5_auth {
 		st.State.Push(&md5.DigestMD5State{
-			ValidateMD5: func(c *md5.Challenge, r *md5.Response) bool {
-				fmt.Println("Validating clinet's reply on our chalenge")
-
-				// Test is a password which we should get from some where else
-				password := "test"
-				hash := r.GenerateHash(c, password)
-
-				log.Println("Expected", hash, "Got", r.Response)
-				return hash == r.Response
-			},
 			Realm: []string{"gojabberd"},
 		})
 	}
 
 	if *sha1_auth {
-		st.State.Push(&auth.AuthState{
-			GetPasswordByUserName: func(username string) string {
-				return "test"
-			},
-		})
 		st.State.Push(&sha1.SHAState{})
 	}
 
