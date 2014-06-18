@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"flag"
 	"fmt"
 	"net"
@@ -16,6 +17,7 @@ import (
 	"github.com/dotdoom/goxmpp/stream"
 	"github.com/dotdoom/goxmpp/stream/elements/features"
 	"github.com/dotdoom/goxmpp/stream/elements/stanzas/presence"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 /*type C2s struct {
@@ -40,11 +42,25 @@ func C2sServer() error {
 		return err
 	}
 
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		panic(err)
+	}
+
+	defer db.Close()
+
+	if _, err := db.Exec("CREATE TABLE users (username STRING, password STRING)"); err != nil {
+		panic(err)
+	}
+	if _, err := db.Exec("INSERT INTO users (username, password) VALUES (?, ?)", "user", "secret"); err != nil {
+		panic(err)
+	}
+
 	println("Server started")
 	for {
 		conn, err := listener.Accept()
 		if err == nil {
-			go C2sConnection(conn)
+			go C2sConnection(conn, db)
 		} else {
 			println(err.Error())
 		}
@@ -59,7 +75,7 @@ func main() {
 	}
 }
 
-func C2sConnection(conn net.Conn) error {
+func C2sConnection(conn net.Conn, db *sql.DB) error {
 	println("New connection")
 	var st *stream.Stream
 
@@ -78,7 +94,18 @@ func C2sConnection(conn net.Conn) error {
 
 	st.State.Push(&auth.AuthState{
 		GetPasswordByUserName: func(username string) string {
-			return "test"
+			fmt.Println("gojabberd: GetPasswordByUserName for", username)
+			var password string
+			err := db.QueryRow("SELECT password FROM users WHERE username = ?", username).Scan(&password)
+			switch {
+			case err == sql.ErrNoRows:
+				fmt.Println("gojabberd: no such user")
+				return ""
+			case err != nil:
+				panic(err)
+			default:
+				return password
+			}
 		},
 	})
 

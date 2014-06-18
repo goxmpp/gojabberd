@@ -3,5 +3,7 @@ set password = secret
 set server = localhost
 set port = 5222
 set tls = 0
+set ssl = 0
+set ssl_verify = 0
 #set tracelog_level = 2
 #set tracelog_file = mcabber.log
