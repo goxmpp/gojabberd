@@ -49,7 +49,7 @@ func C2sServer() error {
 
 	defer db.Close()
 
-	if _, err := db.Exec("CREATE TABLE users (username STRING, password STRING)"); err != nil {
+	if _, err := db.Exec("CREATE TABLE users (username VARCHAR(250) PRIMARY KEY, password VARCHAR(250))"); err != nil {
 		panic(err)
 	}
 	if _, err := db.Exec("INSERT INTO users (username, password) VALUES (?, ?)", "user", "secret"); err != nil {
