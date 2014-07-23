@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/xml"
 	"flag"
 	"fmt"
 	"net"
@@ -15,8 +16,9 @@ import (
 	"github.com/goxmpp/goxmpp/extensions/features/compression"
 	"github.com/goxmpp/goxmpp/extensions/features/starttls"
 	"github.com/goxmpp/goxmpp/stream"
-	"github.com/goxmpp/goxmpp/stream/elements/features"
-	"github.com/goxmpp/goxmpp/stream/elements/stanzas/presence"
+	"github.com/goxmpp/goxmpp/stream/features"
+	"github.com/goxmpp/goxmpp/stream/stanzas/presence"
+	"github.com/goxmpp/xtream"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -80,6 +82,17 @@ func C2sConnection(conn net.Conn, db *sql.DB) error {
 	var st *stream.Stream
 
 	st = stream.NewStream(conn)
+
+	for _, fe := range features.FeatureFactory.List() {
+		feature := fe.Constructor(nil)
+		st.ElementFactory.AddNamed(
+			func(*xml.Name) xtream.Element { return feature.InitHandler() },
+			fe.Parent,
+			fe.Name,
+		)
+		st.AddFeature(feature)
+	}
+
 	st.DefaultNamespace = "jabber:client"
 
 	// Push states for all features we want to use
@@ -138,15 +151,26 @@ func C2sConnection(conn net.Conn, db *sql.DB) error {
 	}})*/
 
 	return st.Open(func(s *stream.Stream) error {
-		// Go through the features loop until stream is finally open (or something wrong happens)
-		if err := features.Loop(st); err != nil {
-			fmt.Println("Features loop failed.", err)
-			return err
+		for s.HasRequired() {
+			e, err := s.ReadElement()
+			if err != nil {
+				fmt.Printf("gojabberd: cannot read element: %v\n", err)
+				return err
+			}
+
+			if handler, ok := e.(features.FeatureHandler); ok {
+				if err := handler.Handle(s, nil); err != nil {
+					fmt.Printf("gojabberd: error ahndling feature: %v\n", err)
+					return err
+				}
+			} else {
+				fmt.Printf("gojabberd: not a feature handler read while feature expected: %v\n", err)
+			}
 		}
 
 		fmt.Println("gojabberd: stream opened, required features passed. JID is", st.To)
 
-		pr := presence.NewPresenceElement()
+		pr := presence.NewPresenceElement(nil)
 		pr.From = "test@localhost"
 		pr.To = st.To
 		pr.Status = ""
@@ -160,9 +184,9 @@ func C2sConnection(conn net.Conn, db *sql.DB) error {
 				return err
 			}
 			fmt.Printf("gojabberd: received element: %#v\n", e)
-			if feature_handler, ok := e.(features.Handler); ok {
+			if feature_handler, ok := e.(features.FeatureHandler); ok {
 				fmt.Println("gojabberd: calling feature handler")
-				if err := feature_handler.Handle(st); err != nil {
+				if err := feature_handler.Handle(st, nil); err != nil {
 					fmt.Printf("gojabberd: cannot handle feature: %v\n", err)
 					continue
 					//return err
