@@ -160,11 +160,18 @@ func C2sConnection(conn net.Conn, db *sql.DB) error {
 
 			if handler, ok := e.(features.FeatureHandler); ok {
 				if err := handler.Handle(s, nil); err != nil {
-					fmt.Printf("gojabberd: error ahndling feature: %v\n", err)
+					fmt.Printf("gojabberd: error handling feature: %v\n", err)
 					return err
 				}
 			} else {
 				fmt.Printf("gojabberd: not a feature handler read while feature expected: %v\n", err)
+			}
+
+			if s.ReOpen {
+				if err := s.ReadSentOpen(); err != nil {
+					fmt.Printf("gojabberd: error reopening stream: %v\n", err)
+					return err
+				}
 			}
 		}
 
