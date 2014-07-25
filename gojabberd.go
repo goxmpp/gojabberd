@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"encoding/xml"
 	"flag"
 	"fmt"
 	"net"
@@ -86,7 +85,7 @@ func C2sConnection(conn net.Conn, db *sql.DB) error {
 	for _, fe := range features.FeatureFactory.List() {
 		feature := fe.Constructor(nil)
 		st.ElementFactory.AddNamed(
-			func(*xml.Name) xtream.Element { return feature.InitHandler() },
+			func() xtream.Element { return feature.InitHandler() },
 			fe.Parent,
 			fe.Name,
 		)
@@ -177,7 +176,7 @@ func C2sConnection(conn net.Conn, db *sql.DB) error {
 
 		fmt.Println("gojabberd: stream opened, required features passed. JID is", st.To)
 
-		pr := presence.NewPresenceElement(nil)
+		pr := presence.NewPresenceElement()
 		pr.From = "test@localhost"
 		pr.To = st.To
 		pr.Status = ""
