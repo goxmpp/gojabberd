@@ -80,10 +80,10 @@ func C2sConnection(conn net.Conn, db *sql.DB) error {
 	println("New connection")
 	var st *stream.Stream
 
-	st = stream.NewStream(conn, features.DependancyGraph)
+	st = stream.NewStream(conn, features.DependencyGraph)
 
-	fmt.Println(features.DependancyGraph)
-	for _, fname := range features.DependancyGraph.Get("stream") {
+	fmt.Println(features.DependencyGraph)
+	for _, fname := range features.DependencyGraph.Get("stream") {
 		fe := features.FeatureFactory.Get(fname)
 		feature := fe.Constructor(nil)
 		st.ElementFactory.AddNamed(
