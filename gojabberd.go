@@ -2,22 +2,19 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"log"
 	"net"
 
 	_ "github.com/goxmpp/goxmpp"
 	"github.com/goxmpp/goxmpp/extensions/features/auth"
-	"github.com/goxmpp/goxmpp/extensions/features/auth/mechanisms/md5"
-	"github.com/goxmpp/goxmpp/extensions/features/auth/mechanisms/plain"
-	"github.com/goxmpp/goxmpp/extensions/features/auth/mechanisms/sha1"
+
 	"github.com/goxmpp/goxmpp/extensions/features/bind"
-	"github.com/goxmpp/goxmpp/extensions/features/compression"
-	"github.com/goxmpp/goxmpp/extensions/features/starttls"
 	"github.com/goxmpp/goxmpp/stream"
 	"github.com/goxmpp/goxmpp/stream/features"
 	"github.com/goxmpp/goxmpp/stream/stanzas/presence"
-	"github.com/goxmpp/xtream"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -28,16 +25,17 @@ import (
 
 var clients map[string]C2s*/
 
-var plain_auth = flag.Bool("plain", false, "Use PLAIN auth")
-var md5_auth = flag.Bool("md5", false, "Use DigestMD5 auth")
-var sha1_auth = flag.Bool("sha1", false, "Use SCRAM-SHA-1 auth")
-var tls = flag.Bool("tls", false, "Use TLS")
+var config = []byte(`{
+	"compression":{"zlib": {}, "lzw": {"Level": 6}},
+	"auth":["SCRAM-SHA-1", "DIGEST-MD5"],
+	"starttls":{
+		"required":false,
+		"pem":"test/gojabberd.pem",
+		"key":"test/gojabberd.key"
+	}
+}`)
 
-// TODO path should be changed to something meaningful
-var pem = flag.String("pem", "test/gojabberd.pem", "Path to pem file")
-var key = flag.String("key", "test/gojabberd.key", "Path to key file")
-
-func C2sServer() error {
+func C2sServer(raw_config stream.RawConfig) error {
 	listener, err := net.Listen("tcp", "0.0.0.0:5222")
 	if err != nil {
 		return err
@@ -61,7 +59,7 @@ func C2sServer() error {
 	for {
 		conn, err := listener.Accept()
 		if err == nil {
-			go C2sConnection(conn, db)
+			go C2sConnection(conn, db, raw_config)
 		} else {
 			println(err.Error())
 		}
@@ -70,32 +68,26 @@ func C2sServer() error {
 
 func main() {
 	flag.Parse()
-	err := C2sServer()
+	var raw_config stream.RawConfig
+	if err := json.Unmarshal(config, &raw_config); err != nil {
+		log.Println("gojabberd error parsing config:", err)
+	}
+
+	err := C2sServer(raw_config)
 	if err != nil {
 		println(err.Error())
 	}
 }
 
-func C2sConnection(conn net.Conn, db *sql.DB) error {
+func C2sConnection(conn net.Conn, db *sql.DB, rconf stream.RawConfig) error {
 	println("New connection")
 	var st *stream.Stream
 
-	st = stream.NewStream(conn)
-
-	for _, fe := range features.FeatureFactory.List() {
-		feature := fe.Constructor(nil)
-		st.ElementFactory.AddNamed(
-			func() xtream.Element { return feature.InitHandler() },
-			fe.Parent,
-			fe.Name,
-		)
-		st.AddFeature(feature)
-	}
+	st = stream.NewStream(conn, features.DependencyGraph)
+	st.Config = rconf
+	features.EnableStreamFeatures(st, "stream")
 
 	st.DefaultNamespace = "jabber:client"
-
-	// Push states for all features we want to use
-	//st.State.Push(&methods.GzipState{Level: 5})
 
 	st.State.Push(&bind.BindState{
 		VerifyResource: func(rc string) bool {
@@ -120,34 +112,6 @@ func C2sConnection(conn net.Conn, db *sql.DB) error {
 			}
 		},
 	})
-
-	if *plain_auth {
-		st.State.Push(&plain.PlainState{
-			VerifyUserAndPassword: func(user string, password string) bool {
-				fmt.Println("VerifyUserAndPassword (using PLAIN) for", user)
-				return true
-			},
-			RequireEncryption: true,
-		})
-	}
-
-	if *md5_auth {
-		st.State.Push(&md5.DigestMD5State{
-			Realm: []string{"gojabberd"},
-		})
-	}
-
-	if *sha1_auth {
-		st.State.Push(&sha1.SHAState{})
-	}
-
-	st.State.Push(compression.NewCompressState())
-	st.State.Push(starttls.NewStartTLSState(*tls, starttls.NewTLSConfig(*pem, *key)))
-
-	/*st.State.Push(&mechanisms.DigestMD5State{Callback: func(user string, salt string) string {
-		fmt.Println("Trying to auth (using DIGEST-MD5)", user)
-		return salt
-	}})*/
 
 	return st.Open(func(s *stream.Stream) error {
 		for s.HasRequired() {
