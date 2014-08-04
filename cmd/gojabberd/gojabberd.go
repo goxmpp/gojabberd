@@ -35,24 +35,28 @@ var config = []byte(`{
 	}
 }`)
 
-func C2sServer(raw_config stream.RawConfig) error {
-	listener, err := net.Listen("tcp", "0.0.0.0:5222")
-	if err != nil {
-		return err
-	}
+var db = initUserDB()
 
+func initUserDB() *sql.DB {
 	db, err := sql.Open("sqlite3", ":memory:")
 	if err != nil {
 		panic(err)
 	}
-
-	defer db.Close()
 
 	if _, err := db.Exec("CREATE TABLE users (username VARCHAR(250) PRIMARY KEY, password VARCHAR(250))"); err != nil {
 		panic(err)
 	}
 	if _, err := db.Exec("INSERT INTO users (username, password) VALUES (?, ?)", "user", "secret"); err != nil {
 		panic(err)
+	}
+
+	return db
+}
+
+func C2sServer(raw_config stream.RawConfig) error {
+	listener, err := net.Listen("tcp", "0.0.0.0:5222")
+	if err != nil {
+		return err
 	}
 
 	println("Server started")
@@ -81,22 +85,20 @@ func main() {
 
 func C2sConnection(conn net.Conn, db *sql.DB, rconf stream.RawConfig) error {
 	println("New connection")
-	var st *stream.Stream
 
-	st = stream.NewStream(conn, features.DependencyGraph)
-	st.Config = rconf
+	st := stream.NewServerStream(conn, features.DependencyGraph, rconf)
 	features.EnableStreamFeatures(st, "stream")
 
-	st.DefaultNamespace = "jabber:client"
+	st.SetDefaultNamespace("jabber:client")
 
-	st.State.Push(&bind.BindState{
+	st.State().Push(&bind.BindState{
 		VerifyResource: func(rc string) bool {
 			fmt.Println("Using resource", rc)
 			return true
 		},
 	})
 
-	st.State.Push(&auth.AuthState{
+	st.State().Push(&auth.AuthState{
 		GetPasswordByUserName: func(username string) string {
 			fmt.Println("gojabberd: GetPasswordByUserName for", username)
 			var password string
@@ -113,65 +115,60 @@ func C2sConnection(conn net.Conn, db *sql.DB, rconf stream.RawConfig) error {
 		},
 	})
 
-	return st.Open(func(s *stream.Stream) error {
-		for s.HasRequired() {
-			e, err := s.ReadElement()
-			if err != nil {
-				fmt.Printf("gojabberd: cannot read element: %v\n", err)
-				return err
-			}
-
-			if handler, ok := e.(features.FeatureHandler); ok {
-				if err := handler.Handle(s, nil); err != nil {
-					fmt.Printf("gojabberd: error handling feature: %v\n", err)
-					return err
-				}
-			} else {
-				fmt.Printf("gojabberd: not a feature handler read while feature expected: %v\n", err)
-			}
-
-			if s.ReOpen {
-				if err := s.ReadSentOpen(); err != nil {
-					fmt.Printf("gojabberd: error reopening stream: %v\n", err)
-					return err
-				}
-			}
+	if err := st.Open(func(s stream.ServerStream) error {
+		e, err := s.ReadElement()
+		if err != nil {
+			log.Println("gojabberd: cannot read element:", err)
+			return err
 		}
 
-		fmt.Println("gojabberd: stream opened, required features passed. JID is", st.To)
-
-		pr := presence.NewPresenceElement()
-		pr.From = "test@localhost"
-		pr.To = st.To
-		pr.Status = ""
-		pr.Show = "I'm online!"
-		st.WriteElement(pr)
-
-		for {
-			e, err := st.ReadElement()
-			if err != nil {
-				fmt.Printf("gojabberd: cannot read element: %v\n", err)
+		if handler, ok := e.(features.FeatureHandler); ok {
+			if err := handler.Handle(s, nil); err != nil {
+				log.Println("gojabberd: error handling feature:", err)
 				return err
 			}
-			fmt.Printf("gojabberd: received element: %#v\n", e)
-			if feature_handler, ok := e.(features.FeatureHandler); ok {
-				fmt.Println("gojabberd: calling feature handler")
-				if err := feature_handler.Handle(st, nil); err != nil {
-					fmt.Printf("gojabberd: cannot handle feature: %v\n", err)
-					continue
-					//return err
-				}
-				fmt.Println("gojabberd: feature handler completed")
-			} else {
-				if stanza, ok := e.(*presence.PresenceElement); ok {
-					fmt.Println("gojabberd: got stanza, responding")
-					stanza.From = "localhost"
-					stanza.To = st.To
-					st.WriteElement(stanza)
-				}
-			}
+		} else {
+			log.Println("gojabberd: not a feature handler read while feature expected:", err)
 		}
 
 		return nil
-	})
+	}); err != nil {
+		log.Println("gojabberd: could not open stream:", err)
+		return err
+	}
+
+	log.Println("gojabberd: stream opened, required features passed. JID is", st.To)
+
+	pr := presence.NewPresenceElement()
+	pr.From = "test@localhost"
+	pr.To = st.To()
+	pr.Status = ""
+	pr.Show = "I'm online!"
+	st.WriteElement(pr)
+
+	for st.Opened() {
+		e, err := st.ReadElement()
+		if err != nil {
+			fmt.Printf("gojabberd: cannot read element: %v\n", err)
+			return err
+		}
+		log.Printf("gojabberd: received element: %#v\n", e)
+		if feature_handler, ok := e.(features.FeatureHandler); ok {
+			log.Println("gojabberd: calling feature handler")
+			if err := feature_handler.Handle(st, nil); err != nil {
+				fmt.Printf("gojabberd: cannot handle feature: %v\n", err)
+				continue
+			}
+			log.Println("gojabberd: feature handler completed")
+		} else {
+			if stanza, ok := e.(*presence.PresenceElement); ok {
+				fmt.Println("gojabberd: got stanza, responding")
+				stanza.From = "localhost"
+				stanza.To = st.To()
+				st.WriteElement(stanza)
+			}
+		}
+	}
+
+	return nil
 }
